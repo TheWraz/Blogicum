@@ -60,7 +60,8 @@ class PostDetailView(DetailView):
                 models.Q(
                     is_published=True,
                     pub_date__lte=timezone.now(),
-                    category__is_published=True)|models.Q(author=user)
+                    category__is_published=True
+                ) | models.Q(author=user)
             )
         else:
             queryset = queryset.filter(
