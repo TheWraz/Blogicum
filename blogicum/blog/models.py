@@ -67,6 +67,12 @@ class Post(PublishedModel):
             'можно делать отложенные публикации.'
         )
     )
+    image = models.ImageField(
+        'Изображение',
+        upload_to='posts_images/',
+        blank=True,
+        null=True
+    )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -94,3 +100,29 @@ class Post(PublishedModel):
 
     def __str__(self):
         return self.title
+
+
+class Comment(models.Model):
+    """Модель комментариев постов в блоге."""
+
+    post = models.ForeignKey(
+        Post,
+        on_delete=models.CASCADE,
+        related_name='comments',
+        verbose_name='Публикация'
+    )
+    author = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Автор'
+    )
+    text = models.TextField('Текст комментария')
+    created_at = models.DateTimeField('Дата публикации', auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'комментарий'
+        verbose_name_plural = 'Комментарии'
+
+    def __str__(self):
+        return f'Комментарий {self.author.username} к посту {self.post.id}'
