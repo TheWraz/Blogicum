@@ -57,8 +57,10 @@ class PostDetailView(DetailView):
 
         if user.is_authenticated:
             queryset = queryset.filter(
-                models.Q(is_published=True, pub_date__lte=timezone.now(), category__is_published=True) |
-                models.Q(author=user)
+                models.Q(
+                    is_published=True,
+                    pub_date__lte=timezone.now(),
+                    category__is_published=True)|models.Q(author=user)
             )
         else:
             queryset = queryset.filter(
