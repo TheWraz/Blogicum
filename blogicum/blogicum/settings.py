@@ -140,4 +140,4 @@ EMAIL_FILE_PATH = BASE_DIR / 'sent_emails'
 
 CSRF_FAILURE_VIEW = 'pages.views.csrf_failure'
 
-CONST = 10
+POSTS_PER_PAGE = 10

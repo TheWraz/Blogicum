@@ -43,6 +43,6 @@ urlpatterns = [
         name='category_posts'
     ),
     path('profile/<str:username>/', profile_view, name='profile'),
-    path('edit/', edit_profile, name='edit_profile'),
+    path('edit_profile/', edit_profile, name='edit_profile'),
     path('posts/', include(post_urls))
 ]

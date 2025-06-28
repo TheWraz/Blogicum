@@ -3,7 +3,7 @@ from django.views.generic import (
 )
 from django.urls import reverse_lazy
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import get_object_or_404, redirect, reverse, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.db.models import Count
 from django.core.paginator import Paginator
@@ -25,14 +25,14 @@ def get_posts_queryset(apply_filters=False, apply_annotations=False):
             is_published=True,
             category__is_published=True,
             pub_date__lte=timezone.now()
-        )
+        ).order_by('-pub_date')
 
     if apply_annotations:
         queryset = queryset.annotate(
             comment_count=Count('comments')
-        )
+        ).order_by('-pub_date')
 
-    return queryset.order_by('-pub_date')
+    return queryset
 
 
 class PostListView(ListView):
@@ -41,11 +41,11 @@ class PostListView(ListView):
     model = Post
     template_name = 'blog/index.html'
     context_object_name = 'page_obj'
-    paginate_by = settings.CONST
-
-    def get_queryset(self):
-        """Использует универсальную функцию."""
-        return get_posts_queryset(apply_filters=True, apply_annotations=True)
+    paginate_by = settings.POSTS_PER_PAGE
+    queryset = get_posts_queryset(
+        apply_filters=True,
+        apply_annotations=True
+    )
 
 
 class PostDetailView(DetailView):
@@ -54,7 +54,6 @@ class PostDetailView(DetailView):
     model = Post
     template_name = 'blog/detail.html'
     context_object_name = 'post'
-    pk_url_kwarg = 'post_id'
 
     def get_object(self):
         """Получает объект поста с проверкой прав доступа."""
@@ -90,21 +89,21 @@ class CategoryPostsView(ListView):
 
     template_name = 'blog/category.html'
     context_object_name = 'page_obj'
-    paginate_by = settings.CONST
+    paginate_by = settings.POSTS_PER_PAGE
 
     def get_category(self):
         """Получает объект категории."""
-        category = get_object_or_404(
+        _category = get_object_or_404(
             Category.objects.filter(is_published=True),
             slug=self.kwargs['category_slug']
         )
-        return category
+        return _category
 
     def get_queryset(self):
         """Использует универсальную функцию и фильтрует по категории."""
         return get_posts_queryset(
             apply_filters=True,
-            apply_annotations=False
+            apply_annotations=True
         ).filter(category=self.get_category())
 
     def get_context_data(self, **kwargs):
@@ -134,20 +133,25 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         )
 
 
-class PostUpdateView(LoginRequiredMixin, UpdateView):
-    """Добавляет возможность редактирования постов."""
+class PostSecurityMixin(LoginRequiredMixin):
+    """Миксин для проверки прав доступа к постам."""
 
     model = Post
-    form_class = PostForm
-    template_name = 'blog/create.html'
     pk_url_kwarg = 'post_id'
 
     def dispatch(self, request, *args, **kwargs):
-        """Проверяет права доступа перед обработкой запроса."""
+        """Проверяет, что пользователь - автор поста."""
         obj = self.get_object()
-        if obj.author != self.request.user:
+        if obj.author != request.user:
             return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
         return super().dispatch(request, *args, **kwargs)
+
+
+class PostUpdateView(PostSecurityMixin, UpdateView):
+    """Добавляет возможность редактирования постов."""
+
+    form_class = PostForm
+    template_name = 'blog/create.html'
 
     def get_success_url(self):
         """URL для перенаправления после успешного редактирования."""
@@ -157,20 +161,11 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
         )
 
 
-class PostDeleteView(LoginRequiredMixin, DeleteView):
+class PostDeleteView(PostSecurityMixin, DeleteView):
     """Добавляет возможность удаления поста с подтверждением."""
 
-    model = Post
     template_name = 'blog/detail.html'
-    pk_url_kwarg = 'post_id'
     success_url = reverse_lazy('blog:index')
-
-    def dispatch(self, request, *args, **kwargs):
-        """Проверяет права доступа перед обработкой запроса."""
-        obj = self.get_object()
-        if obj.author != self.request.user:
-            return redirect('blog:post_detail', post_id=obj.id)
-        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         """Добавляет комментарии в контекст."""
@@ -179,7 +174,24 @@ class PostDeleteView(LoginRequiredMixin, DeleteView):
         return context
 
 
-class CommentCreateView(LoginRequiredMixin, CreateView):
+class CommentMixin(LoginRequiredMixin):
+    """Базовый миксин для работы с комментариями."""
+
+    def get_success_url(self):
+        """Общий URL для перенаправления после действий с комментарием."""
+        return reverse_lazy(
+            'blog:post_detail',
+            kwargs={'post_id': self.kwargs['post_id']}
+        )
+
+    def get_context_data(self, **kwargs):
+        """Добавляет id поста в контекст."""
+        context = super().get_context_data(**kwargs)
+        context['post_id'] = self.kwargs['post_id']
+        return context
+
+
+class CommentCreateView(CommentMixin, CreateView):
     """Добавляет возможность комментировать посты."""
 
     model = Comment
@@ -192,59 +204,33 @@ class CommentCreateView(LoginRequiredMixin, CreateView):
         form.instance.post = get_object_or_404(Post, pk=self.kwargs['post_id'])
         return super().form_valid(form)
 
-    def get_success_url(self):
-        """Возвращает URL для перенаправления после создания комментария."""
-        return reverse(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
+
+class CommentSecurityMixin(CommentMixin):
+    """Миксин добавляющий в базовый миксин комментариев проверку доступа."""
+
+    model = Comment
+    template_name = 'blog/comment.html'
+    pk_url_kwarg = 'comment_id'
+
+    def get_object(self):
+        """Получение комментария с проверкой прав доступа."""
+        return get_object_or_404(
+            Comment.objects.filter(post_id=self.kwargs['post_id']),
+            pk=self.kwargs['comment_id'],
+            author=self.request.user
         )
 
 
-class CommentUpdateView(LoginRequiredMixin, UpdateView):
+class CommentUpdateView(CommentSecurityMixin, UpdateView):
     """Добавляет возможность редактировать комментарии постов."""
 
-    model = Comment
     form_class = CommentForm
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
-
-    def get_object(self):
-        """Получает объект комментария и проверяет права доступа."""
-        return get_object_or_404(
-            Comment.objects.filter(post_id=self.kwargs['post_id']),
-            pk=self.kwargs['comment_id'],
-            author=self.request.user
-        )
-
-    def get_success_url(self):
-        """URL для перенаправления после успешного редактирования."""
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
 
 
-class CommentDeleteView(LoginRequiredMixin, DeleteView):
+class CommentDeleteView(CommentSecurityMixin, DeleteView):
     """Добавляет возможность удалять комментарии постов."""
 
-    model = Comment
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
-
-    def get_object(self):
-        """Получает объект комментария и проверяет права доступа."""
-        return get_object_or_404(
-            Comment.objects.filter(post_id=self.kwargs['post_id']),
-            pk=self.kwargs['comment_id'],
-            author=self.request.user
-        )
-
-    def get_success_url(self):
-        """URL для перенаправления после успешного удаления."""
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
+    pass
 
 
 def profile_view(request, username):
@@ -255,7 +241,7 @@ def profile_view(request, username):
         apply_filters=(request.user != profile),
         apply_annotations=True
     ).filter(author=profile)
-    paginator = Paginator(post_list, settings.CONST)
+    paginator = Paginator(post_list, settings.POSTS_PER_PAGE)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     context = {'profile': profile, 'page_obj': page_obj}
@@ -267,13 +253,11 @@ def edit_profile(request):
     """Отображает страницу редактирования профиля пользователя."""
     template = 'blog/user.html'
     user_edit = request.user
+    form = ProfileEditForm(request.POST or None, instance=user_edit)
 
-    if request.method == 'POST':
-        form = ProfileEditForm(request.POST, instance=user_edit)
-        if form.is_valid():
-            form.save()
-            return redirect('blog:profile', username=user_edit.username)
-    else:
-        form = ProfileEditForm(instance=user_edit)
+    if form.is_valid():
+        form.save()
+        return redirect('blog:profile', username=user_edit.username)
+
     context = {'form': form, 'profile': user_edit}
     return render(request, template, context)
