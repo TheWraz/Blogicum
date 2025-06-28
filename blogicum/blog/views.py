@@ -208,7 +208,7 @@ class CommentUpdateView(LoginRequiredMixin, UpdateView):
     template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
 
-    def get_object(self, queryset=None):
+    def get_object(self):
         """Получает объект комментария и проверяет права доступа."""
         return get_object_or_404(
             Comment.objects.filter(post_id=self.kwargs['post_id']),
@@ -231,7 +231,7 @@ class CommentDeleteView(LoginRequiredMixin, DeleteView):
     template_name = 'blog/comment.html'
     pk_url_kwarg = 'comment_id'
 
-    def get_object(self, queryset=None):
+    def get_object(self):
         """Получает объект комментария и проверяет права доступа."""
         return get_object_or_404(
             Comment.objects.filter(post_id=self.kwargs['post_id']),
