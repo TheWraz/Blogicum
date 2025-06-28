@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Post, Category, Location
+from .models import Post, Category, Location, Comment
 
 
 class PostAdmin(admin.ModelAdmin):
@@ -37,7 +37,17 @@ class LocationAdmin(admin.ModelAdmin):
     list_editable = ('is_published',)
 
 
+class CommentAdmin(admin.ModelAdmin):
+    list_display = (
+        'post',
+        'author',
+        'text',
+        'created_at',
+    )
+
+
 admin.site.empty_value_display = 'Не задано'
 admin.site.register(Category, CategoryAdmin)
 admin.site.register(Location, LocationAdmin)
 admin.site.register(Post, PostAdmin)
+admin.site.register(Comment, CommentAdmin)
