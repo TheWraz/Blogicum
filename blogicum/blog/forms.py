@@ -21,7 +21,6 @@ class PostForm(forms.ModelForm):
         input_formats = ['%Y-%m-%d', '%d.%m.%Y', '%d/%m/%Y']
 
 
-
 class CommentForm(forms.ModelForm):
     class Meta:
         model = Comment
