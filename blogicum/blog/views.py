@@ -14,6 +14,7 @@ from django.conf import settings
 
 from .models import Post, Category, Comment
 from .forms import PostForm, CommentForm, ProfileEditForm
+from .mixins import CommentSecurityMixin
 
 
 def get_posts_queryset(apply_filters=False, apply_annotations=False):
@@ -93,11 +94,10 @@ class CategoryPostsView(ListView):
 
     def get_category(self):
         """Получает объект категории."""
-        _category = get_object_or_404(
+        return get_object_or_404(
             Category.objects.filter(is_published=True),
             slug=self.kwargs['category_slug']
         )
-        return _category
 
     def get_queryset(self):
         """Использует универсальную функцию и фильтрует по категории."""
@@ -133,11 +133,13 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         )
 
 
-class PostSecurityMixin(LoginRequiredMixin):
-    """Миксин для проверки прав доступа к постам."""
-
+class PostUpdateView(LoginRequiredMixin, UpdateView):
+    """Добавляет возможность редактирования постов."""
+    
     model = Post
     pk_url_kwarg = 'post_id'
+    form_class = PostForm
+    template_name = 'blog/create.html'
 
     def dispatch(self, request, *args, **kwargs):
         """Проверяет, что пользователь - автор поста."""
@@ -145,13 +147,6 @@ class PostSecurityMixin(LoginRequiredMixin):
         if obj.author != request.user:
             return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
         return super().dispatch(request, *args, **kwargs)
-
-
-class PostUpdateView(PostSecurityMixin, UpdateView):
-    """Добавляет возможность редактирования постов."""
-
-    form_class = PostForm
-    template_name = 'blog/create.html'
 
     def get_success_url(self):
         """URL для перенаправления после успешного редактирования."""
@@ -161,11 +156,20 @@ class PostUpdateView(PostSecurityMixin, UpdateView):
         )
 
 
-class PostDeleteView(PostSecurityMixin, DeleteView):
+class PostDeleteView(LoginRequiredMixin, DeleteView):
     """Добавляет возможность удаления поста с подтверждением."""
-
+    
+    model = Post
+    pk_url_kwarg = 'post_id'
     template_name = 'blog/detail.html'
     success_url = reverse_lazy('blog:index')
+
+    def dispatch(self, request, *args, **kwargs):
+        """Проверяет, что пользователь - автор поста."""
+        obj = self.get_object()
+        if obj.author != request.user:
+            return redirect('blog:post_detail', post_id=self.kwargs['post_id'])
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         """Добавляет комментарии в контекст."""
@@ -174,24 +178,7 @@ class PostDeleteView(PostSecurityMixin, DeleteView):
         return context
 
 
-class CommentMixin(LoginRequiredMixin):
-    """Базовый миксин для работы с комментариями."""
-
-    def get_success_url(self):
-        """Общий URL для перенаправления после действий с комментарием."""
-        return reverse_lazy(
-            'blog:post_detail',
-            kwargs={'post_id': self.kwargs['post_id']}
-        )
-
-    def get_context_data(self, **kwargs):
-        """Добавляет id поста в контекст."""
-        context = super().get_context_data(**kwargs)
-        context['post_id'] = self.kwargs['post_id']
-        return context
-
-
-class CommentCreateView(CommentMixin, CreateView):
+class CommentCreateView(LoginRequiredMixin, CreateView):
     """Добавляет возможность комментировать посты."""
 
     model = Comment
@@ -199,25 +186,16 @@ class CommentCreateView(CommentMixin, CreateView):
     template_name = 'blog/detail.html'
 
     def form_valid(self, form):
-        """Обрабатывает валидную форму комментария."""
+        """Обработка валидной формы комментария."""
         form.instance.author = self.request.user
         form.instance.post = get_object_or_404(Post, pk=self.kwargs['post_id'])
         return super().form_valid(form)
 
-
-class CommentSecurityMixin(CommentMixin):
-    """Миксин добавляющий в базовый миксин комментариев проверку доступа."""
-
-    model = Comment
-    template_name = 'blog/comment.html'
-    pk_url_kwarg = 'comment_id'
-
-    def get_object(self):
-        """Получение комментария с проверкой прав доступа."""
-        return get_object_or_404(
-            Comment.objects.filter(post_id=self.kwargs['post_id']),
-            pk=self.kwargs['comment_id'],
-            author=self.request.user
+    def get_success_url(self):
+        """URL для перенаправления после создания комментария."""
+        return reverse_lazy(
+            'blog:post_detail',
+            kwargs={'post_id': self.kwargs['post_id']}
         )
 
 

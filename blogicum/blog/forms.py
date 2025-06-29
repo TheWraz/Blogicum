@@ -13,7 +13,7 @@ class PostForm(forms.ModelForm):
         exclude = ('author',)
         widgets = {
             'text': forms.Textarea(attrs={'rows': 3}),
-            'birthday': forms.DateTimeInput(
+            'pub_date': forms.DateTimeInput(
                 attrs={'type': 'datetime-local'},
                 format='%Y-%m-%d'
             )
