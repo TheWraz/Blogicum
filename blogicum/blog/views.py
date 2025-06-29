@@ -135,7 +135,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
 
 class PostUpdateView(LoginRequiredMixin, UpdateView):
     """Добавляет возможность редактирования постов."""
-    
+
     model = Post
     pk_url_kwarg = 'post_id'
     form_class = PostForm
@@ -158,7 +158,7 @@ class PostUpdateView(LoginRequiredMixin, UpdateView):
 
 class PostDeleteView(LoginRequiredMixin, DeleteView):
     """Добавляет возможность удаления поста с подтверждением."""
-    
+
     model = Post
     pk_url_kwarg = 'post_id'
     template_name = 'blog/detail.html'
